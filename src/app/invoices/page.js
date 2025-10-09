@@ -167,7 +167,7 @@ export default function InvoicesPage() {
               </div>
             )}
             <Link 
-              href="/upload" 
+              href="/receipts" 
               className={`btn-primary ${!canCreateMore ? 'opacity-50 cursor-not-allowed' : ''}`}
               onClick={(e) => {
                 if (!canCreateMore) {
@@ -176,7 +176,7 @@ export default function InvoicesPage() {
                 }
               }}
             >
-              + New Invoice
+              + Upload Receipt
             </Link>
           </div>
         </div>
@@ -188,7 +188,7 @@ export default function InvoicesPage() {
             <p className="text-gray-600 mb-6">
               Upload a receipt to create your first invoice
             </p>
-            <Link href="/upload" className="btn-primary">
+            <Link href="/receipts" className="btn-primary">
               Upload Receipt
             </Link>
           </div>

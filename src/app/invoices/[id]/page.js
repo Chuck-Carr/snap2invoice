@@ -13,6 +13,8 @@ export default function InvoiceEditPage() {
   const [invoice, setInvoice] = useState(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [receipts, setReceipts] = useState([]);
+  const [loadingReceipts, setLoadingReceipts] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -23,6 +25,7 @@ export default function InvoiceEditPage() {
   useEffect(() => {
     if (user && params.id) {
       fetchInvoice();
+      fetchReceipts();
     }
   }, [user, params.id]);
 
@@ -66,6 +69,25 @@ export default function InvoiceEditPage() {
     } catch (error) {
       console.error('Error fetching invoice:', error);
       setMessage('Invoice not found or access denied');
+    }
+  };
+
+  const fetchReceipts = async () => {
+    setLoadingReceipts(true);
+    try {
+      const { data, error } = await supabase
+        .from('receipts')
+        .select('*')
+        .eq('invoice_id', params.id)
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setReceipts(data || []);
+    } catch (error) {
+      console.error('Error fetching receipts:', error);
+    } finally {
+      setLoadingReceipts(false);
     }
   };
 

@@ -53,6 +53,7 @@ export async function POST(req) {
     const file = formData.get('file');
     const ocrText = formData.get('ocrText') || ''; // OCR text from client
     const ocrData = formData.get('ocrData'); // Parsed OCR data from client
+    const invoiceId = formData.get('invoiceId'); // Optional invoice ID to add receipt to
     const ocrProcessed = ocrText.length > 0; // Define if OCR was processed
     
     if (!file) throw new Error('No file uploaded');
@@ -74,23 +75,39 @@ export async function POST(req) {
       .getPublicUrl(filePath);
 
     // Insert receipt record
+    const receiptData = { 
+      user_id: user.id,
+      file_name: file.name, 
+      file_url: publicUrl.publicUrl,
+      ocr_text: ocrText,
+      ocr_processed: ocrProcessed
+    };
+    
+    // If invoice ID is provided, verify it belongs to the user and add it to receipt data
+    if (invoiceId) {
+      const { data: existingInvoice, error: invoiceCheckError } = await supabase
+        .from('invoices')
+        .select('id')
+        .eq('id', invoiceId)
+        .eq('user_id', user.id)
+        .single();
+        
+      if (!invoiceCheckError && existingInvoice) {
+        receiptData.invoice_id = invoiceId;
+      }
+    }
+    
     const { data: receipt, error: dbError } = await supabase
       .from('receipts')
-      .insert([{ 
-        user_id: user.id,
-        file_name: file.name, 
-        file_url: publicUrl.publicUrl,
-        ocr_text: ocrText,
-        ocr_processed: ocrProcessed
-      }])
+      .insert([receiptData])
       .select()
       .single();
     
     if (dbError) throw dbError;
 
-    // If OCR data was provided, create a draft invoice
+    // If OCR data was provided and not adding to existing invoice, create a draft invoice
     let invoice = null;
-    if (ocrData) {
+    if (ocrData && !invoiceId) {
       try {
         const extractedData = JSON.parse(ocrData);
         

@@ -26,10 +26,10 @@ export default function Navigation() {
             {user && (
               <div className="flex space-x-4 ml-8">
                 <Link 
-                  href="/upload" 
+                  href="/receipts" 
                   className="text-gray-600 hover:text-blue-600 transition-colors"
                 >
-                  Upload Receipt
+                  Receipts
                 </Link>
                 <Link 
                   href="/invoices" 
