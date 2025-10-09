@@ -1,4 +1,5 @@
 import "../app/globals.css";
+import { AuthProvider } from '../contexts/AuthContext';
 
 export const metadata = {
   title: 'Snap2Invoice',
@@ -8,7 +9,11 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body className="font-sans">{children}</body>
+      <body className="font-sans">
+        <AuthProvider>
+          {children}
+        </AuthProvider>
+      </body>
     </html>
   );
 }

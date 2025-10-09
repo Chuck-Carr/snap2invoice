@@ -39,3 +39,14 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Testing Guide
+TESTING_GUIDE.md
+SECURITY_FEATURES.md
+ACCOUNT_FEATURES.md
+IPHONE_HEIC_FIX.md
+OCR_*.md
+
+#database
+/database
+*.sql
