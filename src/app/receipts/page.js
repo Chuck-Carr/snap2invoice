@@ -156,8 +156,12 @@ export default function ReceiptsPage() {
           formData.append('ocrData', JSON.stringify(extractedData));
         }
         
-        if (selectedInvoice) {
+        if (selectedInvoice && selectedInvoice !== 'new-invoice') {
           formData.append('invoiceId', selectedInvoice);
+        }
+        
+        if (selectedInvoice === 'new-invoice') {
+          formData.append('createNewInvoice', 'true');
         }
 
         const res = await fetch('/api/upload', {
@@ -176,7 +180,20 @@ export default function ReceiptsPage() {
 
       const results = await Promise.all(uploadPromises);
       
-      setMessage(`✅ Successfully uploaded ${results.length} receipt(s)!`);
+      // Set success message based on what was done
+      if (selectedInvoice === 'new-invoice') {
+        const newInvoice = results.find(r => r.invoice);
+        if (newInvoice && newInvoice.invoice) {
+          setMessage(`✅ Successfully uploaded ${results.length} receipt(s) and created invoice #${newInvoice.invoice.invoice_number}!`);
+        } else {
+          setMessage(`✅ Successfully uploaded ${results.length} receipt(s)!`);
+        }
+      } else if (selectedInvoice && selectedInvoice !== '') {
+        setMessage(`✅ Successfully uploaded ${results.length} receipt(s) and added to invoice!`);
+      } else {
+        setMessage(`✅ Successfully uploaded ${results.length} receipt(s)! You can now select them to create invoices.`);
+      }
+      
       setFiles([]);
       setProcessingStep('');
       setShowUploadForm(false);
@@ -505,20 +522,31 @@ export default function ReceiptsPage() {
               <form onSubmit={handleUpload}>
                 <div className="mb-4">
                   <label className="block text-sm font-medium mb-2">
-                    Add to existing invoice (optional)
+                    What do you want to do with these receipts?
                   </label>
                   <select
                     value={selectedInvoice}
                     onChange={(e) => setSelectedInvoice(e.target.value)}
                     className="w-full p-2 border rounded-lg"
                   >
-                    <option value="">Create new invoice</option>
-                    {invoices.map(invoice => (
-                      <option key={invoice.id} value={invoice.id}>
-                        #{invoice.invoice_number} - {invoice.client_name || 'No client name'} ({invoice.status})
-                      </option>
-                    ))}
+                    <option value="">Just upload receipts (no invoice)</option>
+                    <option value="new-invoice">Create new invoice from receipts</option>
+                    <optgroup label="Add to existing invoice:">
+                      {invoices.map(invoice => (
+                        <option key={invoice.id} value={invoice.id}>
+                          #{invoice.invoice_number} - {invoice.client_name || 'No client name'} ({invoice.status})
+                        </option>
+                      ))}
+                    </optgroup>
                   </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {selectedInvoice === '' 
+                      ? 'Receipts will be uploaded and available for later use'
+                      : selectedInvoice === 'new-invoice' 
+                        ? 'A new invoice will be created with items from these receipts'
+                        : 'Receipts will be added to the selected existing invoice'
+                    }
+                  </p>
                 </div>
                 
                 <div className="mb-4">
@@ -626,7 +654,11 @@ export default function ReceiptsPage() {
                         {processingStep || 'Processing...'}
                       </>
                     ) : (
-                      `Upload & Process ${files.length} Receipt${files.length !== 1 ? 's' : ''}`
+                      selectedInvoice === '' 
+                        ? `Upload ${files.length} Receipt${files.length !== 1 ? 's' : ''}` 
+                        : selectedInvoice === 'new-invoice'
+                          ? `Upload & Create Invoice (${files.length} receipt${files.length !== 1 ? 's' : ''})`
+                          : `Upload & Add to Invoice (${files.length} receipt${files.length !== 1 ? 's' : ''})`
                     )}
                   </button>
                 </div>
@@ -698,18 +730,22 @@ export default function ReceiptsPage() {
                 const isSelected = selectedReceipts.includes(receipt.id);
                 
                 return (
-                  <div key={receipt.id} className={`card transition-colors ${
-                    isSelected ? 'ring-2 ring-blue-500 bg-blue-50' : ''
-                  } ${
-                    isLinked ? 'opacity-75 border-green-200' : 'cursor-pointer'
-                  }`}>
+                  <div 
+                    key={receipt.id} 
+                    className={`card transition-colors ${
+                      isSelected ? 'ring-2 ring-blue-500 bg-blue-50' : ''
+                    } ${
+                      isLinked ? 'opacity-75 border-green-200' : 'cursor-pointer hover:shadow-md'
+                    }`}
+                    onClick={!isLinked ? () => handleReceiptSelect(receipt.id) : undefined}
+                  >
                     <div className="flex items-start space-x-3">
                       <input
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => handleReceiptSelect(receipt.id)}
                         disabled={isLinked}
-                        className={`mt-1 ${isLinked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        className={`mt-1 pointer-events-none ${isLinked ? 'opacity-50 cursor-not-allowed' : ''}`}
                       />
                     <div className="flex-1">
                       <div className="flex items-center justify-between mb-2">
@@ -732,6 +768,7 @@ export default function ReceiptsPage() {
                           <Link 
                             href={`/invoices/${receipt.invoices[0].id}`}
                             className="text-xs text-blue-500 hover:text-blue-700"
+                            onClick={(e) => e.stopPropagation()}
                           >
                             Edit Invoice →
                           </Link>

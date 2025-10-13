@@ -54,6 +54,7 @@ export async function POST(req) {
     const ocrText = formData.get('ocrText') || ''; // OCR text from client
     const ocrData = formData.get('ocrData'); // Parsed OCR data from client
     const invoiceId = formData.get('invoiceId'); // Optional invoice ID to add receipt to
+    const createNewInvoice = formData.get('createNewInvoice') === 'true'; // Explicit flag to create new invoice
     const ocrProcessed = ocrText.length > 0; // Define if OCR was processed
     
     if (!file) throw new Error('No file uploaded');
@@ -105,9 +106,12 @@ export async function POST(req) {
     
     if (dbError) throw dbError;
 
-    // If OCR data was provided and not adding to existing invoice, create a draft invoice
+    // Invoice creation logic:
+    // - Only create if explicitly requested via createNewInvoice=true
+    // - Don't create if adding to existing invoice (invoiceId provided)
+    // - Require OCR data to have something to populate the invoice with
     let invoice = null;
-    if (ocrData && !invoiceId) {
+    if (ocrData && createNewInvoice && !invoiceId) {
       try {
         const extractedData = JSON.parse(ocrData);
         

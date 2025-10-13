@@ -48,3 +48,78 @@ body {
 .card {
   @apply bg-white rounded-lg shadow-md p-6 border border-gray-200;
 }
+
+/* Invoice Template Enhancements */
+.invoice-template {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  line-height: 1.4;
+  color: #1a1a1a;
+}
+
+.invoice-template h1, .invoice-template h2, .invoice-template h3 {
+  font-weight: 700;
+  margin: 0;
+}
+
+.invoice-template table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.invoice-template th, .invoice-template td {
+  border: 1px solid #d1d5db;
+  text-align: left;
+  vertical-align: top;
+}
+
+.invoice-template th {
+  background-color: #f9fafb;
+  font-weight: 600;
+}
+
+.invoice-template .currency {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Improved button styles */
+.btn-primary {
+  @apply bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 font-medium;
+}
+
+.btn-secondary {
+  @apply bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors duration-200 font-medium;
+}
+
+/* Enhanced input fields */
+.input-field {
+  @apply border border-gray-300 rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200;
+}
+
+/* Modal z-index fix */
+.modal-overlay {
+  z-index: 1000;
+}
+
+/* Print styles */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  
+  .invoice-template, .invoice-template * {
+    visibility: visible;
+  }
+  
+  .invoice-template {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 20px;
+  }
+  
+  .no-print {
+    display: none !important;
+  }
+}

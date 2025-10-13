@@ -115,34 +115,56 @@ export default function AccountPage() {
       return;
     }
 
+    // Client-side validation
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    if (logoFile.size > maxSize) {
+      setMessage('❌ File too large. Please choose an image under 5MB.');
+      return;
+    }
+
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(logoFile.type)) {
+      setMessage('❌ Invalid file type. Please upload a JPEG, PNG, GIF, or WebP image.');
+      return;
+    }
+
     setUploading(true);
+    setMessage('📤 Uploading logo...');
     try {
-      const fileExt = logoFile.name.split('.').pop();
-      const fileName = `${user.id}/logo.${fileExt}`;
-      const filePath = `logos/${fileName}`;
+      // Get user's access token
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
 
-      // Upload file
-      const { error: uploadError } = await supabase.storage
-        .from('receipts') // Using same bucket for simplicity
-        .upload(filePath, logoFile, { 
-          contentType: logoFile.type,
-          upsert: true // Replace existing logo
-        });
+      if (!token) {
+        throw new Error('Authentication token not found');
+      }
 
-      if (uploadError) throw uploadError;
+      // Create form data
+      const formData = new FormData();
+      formData.append('logo', logoFile);
 
-      // Get public URL
-      const { data: publicUrl } = supabase.storage
-        .from('receipts')
-        .getPublicUrl(filePath);
+      // Upload via API endpoint
+      const response = await fetch('/api/upload-logo', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      });
 
-      // Update profile with logo URL
-      await updateProfile({ logo_url: publicUrl.publicUrl });
-      setLogoFile(null);
-      setMessage('✅ Logo uploaded successfully');
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        // Update local profile state
+        setProfile(prev => ({ ...prev, logo_url: data.logoUrl }));
+        setLogoFile(null);
+        setMessage('✅ Logo uploaded successfully');
+      } else {
+        throw new Error(data.error || 'Failed to upload logo');
+      }
     } catch (error) {
       console.error('Error uploading logo:', error);
-      setMessage('❌ Failed to upload logo');
+      setMessage('❌ Failed to upload logo: ' + error.message);
     } finally {
       setUploading(false);
     }
@@ -501,7 +523,7 @@ export default function AccountPage() {
                     className="input-field"
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    Recommended: PNG or JPG, max 2MB, square aspect ratio
+                    Recommended: PNG or JPG, max 5MB, square aspect ratio for best results
                   </p>
                 </div>
                 

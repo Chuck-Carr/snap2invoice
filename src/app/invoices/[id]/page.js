@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '../../../contexts/AuthContext';
 import Navigation from '../../../components/Navigation';
+import InvoicePreviewModal from '../../../components/InvoicePreviewModal';
 import { supabase } from '../../supabaseClient';
 
 export default function InvoiceEditPage() {
@@ -15,6 +16,8 @@ export default function InvoiceEditPage() {
   const [message, setMessage] = useState('');
   const [receipts, setReceipts] = useState([]);
   const [loadingReceipts, setLoadingReceipts] = useState(false);
+  const [profile, setProfile] = useState(null);
+  const [showPreview, setShowPreview] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -26,6 +29,7 @@ export default function InvoiceEditPage() {
     if (user && params.id) {
       fetchInvoice();
       fetchReceipts();
+      fetchProfile();
     }
   }, [user, params.id]);
 
@@ -91,6 +95,33 @@ export default function InvoiceEditPage() {
     }
   };
 
+  const fetchProfile = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (error) {
+        console.error('Error fetching profile:', error);
+        // Set default profile if none exists
+        setProfile({
+          subscription_plan: 'free',
+          business_name: '',
+          business_email: '',
+          business_phone: '',
+          business_address: '',
+          logo_url: null
+        });
+      } else {
+        setProfile(data);
+      }
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+    }
+  };
+
   const updateInvoice = async (updates) => {
     setSaving(true);
     try {
@@ -144,7 +175,10 @@ export default function InvoiceEditPage() {
       if (item.id === itemId) {
         const updated = { ...item, [field]: value };
         if (field === 'quantity' || field === 'rate') {
-          updated.amount = updated.quantity * updated.rate;
+          // Fix floating point precision issues
+          const quantity = parseFloat(updated.quantity) || 0;
+          const rate = parseFloat(updated.rate) || 0;
+          updated.amount = Math.round(quantity * rate * 100) / 100; // Round to 2 decimal places
         }
         return updated;
       }
@@ -184,10 +218,9 @@ export default function InvoiceEditPage() {
     updateInvoice(updates);
   };
 
-  const generatePDF = async () => {
-    // In a real app, you'd use a library like jsPDF or puppeteer
-    // For now, we'll just show a preview
-    window.print();
+  const handlePreviewInvoice = () => {
+    console.log('handlePreviewInvoice called', { invoice: !!invoice, profile: !!profile });
+    setShowPreview(true);
   };
 
   if (loading) {
@@ -231,10 +264,11 @@ export default function InvoiceEditPage() {
             </h1>
             <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4 w-full sm:w-auto">
               <button
-                onClick={generatePDF}
+                onClick={handlePreviewInvoice}
                 className="btn-secondary text-sm sm:text-base w-full sm:w-auto"
+                disabled={!invoice || !profile}
               >
-                📄 Preview/Print
+                📄 Preview & Download
               </button>
               <button
                 onClick={() => router.push('/invoices')}
@@ -375,8 +409,12 @@ export default function InvoiceEditPage() {
                             type="number"
                             min="0"
                             step="0.01"
-                            value={item.quantity || 0}
-                            onChange={(e) => updateItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
+                            value={item.quantity ? parseFloat(item.quantity).toFixed(2) : '0.00'}
+                            onChange={(e) => {
+                              const value = parseFloat(e.target.value) || 0;
+                              const roundedValue = Math.round(value * 100) / 100; // Round to 2 decimal places
+                              updateItem(item.id, 'quantity', roundedValue);
+                            }}
                             className="input-field text-sm w-full"
                           />
                         </div>
@@ -386,8 +424,12 @@ export default function InvoiceEditPage() {
                             type="number"
                             min="0"
                             step="0.01"
-                            value={item.rate || 0}
-                            onChange={(e) => updateItem(item.id, 'rate', parseFloat(e.target.value) || 0)}
+                            value={item.rate ? parseFloat(item.rate).toFixed(2) : '0.00'}
+                            onChange={(e) => {
+                              const value = parseFloat(e.target.value) || 0;
+                              const roundedValue = Math.round(value * 100) / 100; // Round to 2 decimal places
+                              updateItem(item.id, 'rate', roundedValue);
+                            }}
                             className="input-field text-sm w-full"
                           />
                         </div>
@@ -440,6 +482,23 @@ export default function InvoiceEditPage() {
           </div>
         </div>
       </main>
+      
+      {/* Invoice Preview Modal */}
+      {invoice && (
+        <InvoicePreviewModal
+          isOpen={showPreview}
+          onClose={() => setShowPreview(false)}
+          invoice={invoice}
+          profile={profile || {
+            subscription_plan: 'free',
+            business_name: 'Test Business',
+            business_email: 'test@test.com',
+            business_phone: '555-1234',
+            business_address: 'Test Address',
+            logo_url: null
+          }}
+        />
+      )}
     </>
   );
 }
