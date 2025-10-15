@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { hasValidPremiumAccess, isWithinFreePlanLimits } from '../../../../lib/subscription';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -34,20 +35,19 @@ export async function POST(req) {
       return new Response(JSON.stringify({ error: 'Receipt IDs are required' }), { status: 400 });
     }
 
-    // Check user's monthly limit
+    // Check user's subscription and monthly limit
     const { data: profile, error: profileError } = await supabase
       .from('user_profiles')
-      .select('subscription_plan, invoices_this_month, month_year')
+      .select('subscription_plan, subscription_expires_at, subscription_cancelled_at, invoices_this_month, month_year')
       .eq('id', user.id)
       .single();
 
     if (profileError) throw profileError;
 
-    const currentMonth = new Date().toISOString().slice(0, 7);
-    const isFreePlan = profile.subscription_plan === 'free';
-    const hasExceededLimit = isFreePlan && profile.invoices_this_month >= 3 && profile.month_year === currentMonth;
+    const isPremium = hasValidPremiumAccess(profile);
+    const withinLimits = isWithinFreePlanLimits(profile);
 
-    if (hasExceededLimit) {
+    if (!withinLimits) {
       return new Response(JSON.stringify({ 
         error: 'Monthly limit reached. Please upgrade to premium for unlimited invoices.' 
       }), { status: 403 });
@@ -87,146 +87,10 @@ export async function POST(req) {
     // Note: We'll implement server-side versions of these functions since the original
     // OCR utilities are designed for client-side use with Tesseract.js
     
-    // Server-side OCR data extraction function
-    function extractReceiptDataServer(ocrText) {
-      const lines = ocrText.split('\n').map(line => line.trim()).filter(line => line);
-      
-      const extractedData = {
-        merchantName: '',
-        items: [],
-        total: 0,
-        tax: 0,
-        date: null
-      };
-
-      // Enhanced patterns for extraction with more variations
-      const totalPattern = /(?:total|amount|sum|balance|due|grand)[\s:$]*([\d,]+\.?\d*)/i;
-      const totalPatternAlt = /(?:t0tal|t0t4l|t07al|t074l|t0741|to7al|to74l|70tal|7otal|tota1|t0ta1)[\s:$]*([\d,]+\.?\d*)/i;
-      const taxPattern = /(?:tax|vat|sales\s*tax|hst|gst|pst)[\s:$]*([\d,]+\.?\d*)/i;
-      const datePattern = /(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/;
-      const pricePattern = /\$?[\d,]+\.\d{2}/g;
-      
-      // Fallback patterns for when primary extraction fails
-      const dollarAmountPattern = /\$[\d,]+\.\d{2}/g;
-      
-      const excludeFromItemsPattern = /(?:total|subtotal|sub\s*total|tax|vat|sales\s*tax|amount|sum|balance|due|change|cash|credit|debit|tender|usd\$|usb\$|u5d\$|u50\$|payment|paid|auth\s*code|card|visa|mastercard|discover|amex)/i;
-      const paymentMethodPattern = /(?:usd\$|usb\$|u5d\$|u50\$|card\s*#|auth\s*code|approval|transaction|ref\s*#|batch|seq|terminal)/i;
-
-      // Extract merchant name
-      if (lines.length > 0) {
-        extractedData.merchantName = lines[0];
-      }
-
-      // Extract date
-      for (const line of lines) {
-        const dateMatch = line.match(datePattern);
-        if (dateMatch) {
-          extractedData.date = dateMatch[1];
-          break;
-        }
-      }
-
-      // Extract total
-      for (const line of lines) {
-        const totalMatch = line.match(totalPattern) || line.match(totalPatternAlt);
-        if (totalMatch) {
-          extractedData.total = parseFloat(totalMatch[1]);
-          break;
-        }
-      }
-
-      // Extract tax
-      for (const line of lines) {
-        const taxMatch = line.match(taxPattern);
-        if (taxMatch) {
-          extractedData.tax = parseFloat(taxMatch[1]);
-          break;
-        }
-      }
-
-      // Find total line index
-      let totalLineIndex = -1;
-      lines.forEach((line, index) => {
-        if ((line.match(totalPattern) || line.match(totalPatternAlt)) && totalLineIndex === -1) {
-          totalLineIndex = index;
-        }
-      });
-      
-      // Extract items
-      lines.forEach((line, index) => {
-        if (totalLineIndex >= 0 && index >= totalLineIndex) {
-          return;
-        }
-        
-        const prices = line.match(pricePattern);
-        if (prices) {
-          const isExcluded = line.match(excludeFromItemsPattern) || line.match(paymentMethodPattern);
-          
-          if (!isExcluded) {
-            const lastPrice = prices[prices.length - 1];
-            const description = line.replace(lastPrice, '').trim();
-            
-            if (description && 
-                description.length > 2 && 
-                !description.match(/^\d+$/) && 
-                !description.match(/^[\s\-\.]+$/) && 
-                description.length < 100) {
-              
-              extractedData.items.push({
-                description: description,
-                amount: parseFloat(lastPrice.replace('$', ''))
-              });
-            }
-          }
-        }
-      });
-
-      // If we didn't find much useful data, try more aggressive extraction
-      if (extractedData.items.length === 0 && extractedData.total === 0) {
-        console.log('Trying fallback extraction methods for server-side processing...');
-        
-        // Look for any dollar amounts in the text
-        const allDollarAmounts = [];
-        const dollarMatches = ocrText.match(dollarAmountPattern);
-        if (dollarMatches) {
-          dollarMatches.forEach(match => {
-            const amount = parseFloat(match.replace(/[$,]/g, ''));
-            if (amount > 0 && amount < 10000) { // Reasonable range
-              allDollarAmounts.push(amount);
-            }
-          });
-          
-          // If we found dollar amounts, assume the highest one might be the total
-          if (allDollarAmounts.length > 0) {
-            allDollarAmounts.sort((a, b) => b - a);
-            extractedData.total = allDollarAmounts[0];
-            
-            // Create a generic item with the total
-            if (extractedData.items.length === 0) {
-              extractedData.items.push({
-                description: 'Services/Products',
-                amount: extractedData.total
-              });
-            }
-            
-            console.log('Server fallback extraction found total:', extractedData.total);
-          }
-        }
-        
-        // Look for any date-like patterns
-        if (!extractedData.date) {
-          const dateMatches = ocrText.match(datePattern);
-          if (dateMatches) {
-            extractedData.date = dateMatches[0];
-            console.log('Server fallback extraction found date:', extractedData.date);
-          }
-        }
-      }
-      
-      return extractedData;
-    }
+    // Import enhanced server-side extraction
+    const { extractReceiptDataServer } = await import('../../../../lib/ocr-server.js');
     
-    // Server-side invoice items generation
+    // Server-side invoice items generation (enhanced)
     function generateInvoiceItemsServer(extractedData) {
       const items = [];
 
@@ -235,20 +99,21 @@ export async function POST(req) {
         items.push({
           id: `item-${index}`,
           description: item.description,
-          quantity: 1,
+          quantity: item.quantity || 1,
           rate: item.amount,
           amount: item.amount
         });
       });
 
-      // If no items were extracted, create a general item with the total
+      // If no items were extracted, create a general item with the subtotal
       if (items.length === 0 && extractedData.total > 0) {
+        const itemAmount = extractedData.subtotal > 0 ? extractedData.subtotal : extractedData.total - (extractedData.tax || 0);
         items.push({
           id: 'item-0',
           description: `Services/Products from ${extractedData.merchantName || 'Merchant'}`,
           quantity: 1,
-          rate: extractedData.total - (extractedData.tax || 0),
-          amount: extractedData.total - (extractedData.tax || 0)
+          rate: itemAmount,
+          amount: itemAmount
         });
       }
 
@@ -274,7 +139,8 @@ export async function POST(req) {
           }));
           
           allItems.push(...itemsWithSource);
-          combinedSubtotal += extractedData.items.reduce((sum, item) => sum + (item.amount || 0), 0);
+          // Use subtotal from enhanced extraction if available
+          combinedSubtotal += extractedData.subtotal || extractedData.items.reduce((sum, item) => sum + (item.amount || 0), 0);
           combinedTaxAmount += extractedData.tax || 0;
           processedReceiptNames.push(receipt.file_name);
           
@@ -305,6 +171,9 @@ export async function POST(req) {
     const finalTaxAmount = combinedTaxAmount;
     const finalTotal = finalSubtotal + finalTaxAmount;
     
+    // Calculate tax rate if we have both subtotal and tax
+    const taxRate = finalSubtotal > 0 && finalTaxAmount > 0 ? (finalTaxAmount / finalSubtotal) * 100 : 0;
+    
     // Generate invoice number
     const invoiceNumber = `INV-${Date.now()}`;
     
@@ -324,7 +193,7 @@ export async function POST(req) {
         items: JSON.stringify(allItems),
         subtotal: finalSubtotal.toFixed(2),
         tax_amount: finalTaxAmount.toFixed(2),
-        tax_rate: finalSubtotal > 0 ? ((finalTaxAmount / finalSubtotal) * 100).toFixed(2) : 0,
+        tax_rate: taxRate.toFixed(2),
         total_amount: finalTotal.toFixed(2),
         status: 'draft',
         notes: notes

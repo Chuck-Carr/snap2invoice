@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useAuth } from '../../contexts/AuthContext';
 import Navigation from '../../components/Navigation';
 import { supabase } from '../supabaseClient';
+import { hasValidPremiumAccess, isWithinFreePlanLimits } from '../../lib/subscription';
 
 export default function InvoicesPage() {
   const { user, loading } = useAuth();
@@ -31,7 +32,7 @@ export default function InvoicesPage() {
     try {
       const { data, error } = await supabase
         .from('user_profiles')
-        .select('subscription_plan, invoices_this_month, month_year')
+        .select('subscription_plan, subscription_expires_at, subscription_cancelled_at, invoices_this_month, month_year')
         .eq('id', user.id)
         .single();
 
@@ -136,9 +137,9 @@ export default function InvoicesPage() {
   }
 
   const currentMonth = new Date().toISOString().slice(0, 7);
-  const isFreePlan = userProfile?.subscription_plan === 'free';
+  const isPremium = hasValidPremiumAccess(userProfile);
   const monthlyUsage = userProfile?.month_year === currentMonth ? userProfile?.invoices_this_month : 0;
-  const canCreateMore = !isFreePlan || monthlyUsage < 3;
+  const canCreateMore = isWithinFreePlanLimits(userProfile);
 
   return (
     <>
@@ -147,7 +148,7 @@ export default function InvoicesPage() {
         <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-3xl font-bold mb-2">Your Invoices</h1>
-            {isFreePlan && (
+            {!isPremium && (
               <p className="text-gray-600">
                 Free plan: {monthlyUsage}/3 invoices this month
                 {!canCreateMore && (

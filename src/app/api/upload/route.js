@@ -1,6 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
 import mime from 'mime';
+import { hasValidPremiumAccess, isWithinFreePlanLimits } from '../../../lib/subscription';
+import { canUserUploadReceipt, recordReceiptUpload, initializeUsageTracking } from '../../../lib/usage-tracker.js';
+import { PRICING_PLANS, checkUsageLimit } from '../../../lib/pricing.js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -30,24 +33,27 @@ export async function POST(req) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
     }
 
-    // Check user's monthly limit
-    const { data: profile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('subscription_plan, invoices_this_month, month_year')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError) throw profileError;
-
-    const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM format
-    const isFreePlan = profile.subscription_plan === 'free';
-    const hasExceededLimit = isFreePlan && profile.invoices_this_month >= 3 && profile.month_year === currentMonth;
-
-    if (hasExceededLimit) {
-      return new Response(JSON.stringify({ 
-        error: 'Monthly limit reached. Please upgrade to premium for unlimited invoices.' 
+    // Initialize usage tracking (ensure tables exist)
+    await initializeUsageTracking();
+    
+    // Check new pay-per-use limits
+    const usageStatus = await canUserUploadReceipt(user.id);
+    
+    if (!usageStatus.canUpload) {
+      return new Response(JSON.stringify({
+        error: usageStatus.message,
+        planName: usageStatus.planName,
+        currentUsage: usageStatus.currentUsage,
+        upgradeRequired: true
       }), { status: 403 });
     }
+    
+    console.log('✅ Usage check passed:', {
+      user: user.id,
+      plan: usageStatus.planName,
+      remaining: usageStatus.remaining,
+      nextCost: usageStatus.nextReceiptCost
+    });
 
     const formData = await req.formData();
     const file = formData.get('file');
@@ -105,6 +111,21 @@ export async function POST(req) {
       .single();
     
     if (dbError) throw dbError;
+    
+    // Record usage and calculate cost
+    const receiptCost = usageStatus.nextReceiptCost;
+    await recordReceiptUpload(user.id, receiptCost, {
+      receiptId: receipt.id,
+      fileName: file.name,
+      fileSize: file.size,
+      ocrProcessed: ocrProcessed
+    });
+    
+    console.log('📈 Recorded receipt upload:', {
+      userId: user.id,
+      receiptId: receipt.id,
+      cost: receiptCost
+    });
 
     // Invoice creation logic:
     // - Only create if explicitly requested via createNewInvoice=true

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '../../contexts/AuthContext';
 import Navigation from '../../components/Navigation';
 import { supabase } from '../supabaseClient';
+import { hasValidPremiumAccess, getSubscriptionStatus } from '../../lib/subscription';
 
 export default function AccountPage() {
   const { user, loading } = useAuth();
@@ -35,6 +36,24 @@ export default function AccountPage() {
 
   const fetchProfile = async () => {
     try {
+      // Try new pay-per-use system first
+      const response = await fetch('/api/usage/analytics');
+      if (response.ok) {
+        const usageData = await response.json();
+        setProfile({
+          id: user.id,
+          email: user.email,
+          subscription_plan: usageData.subscription.planId,
+          plan_details: usageData.subscription.planDetails,
+          usage: usageData.currentMonth,
+          // Set premium access based on plan
+          subscription_expires_at: null,
+          subscription_cancelled_at: null
+        });
+        return;
+      }
+      
+      // Fallback to old system if new system not available
       const { data, error } = await supabase
         .from('user_profiles')
         .select('*')
@@ -111,7 +130,7 @@ export default function AccountPage() {
   };
 
   const uploadLogo = async () => {
-    if (!logoFile || profile.subscription_plan !== 'premium') {
+    if (!logoFile || !hasValidPremiumAccess(profile)) {
       return;
     }
 
@@ -170,45 +189,36 @@ export default function AccountPage() {
     }
   };
 
-  const upgradeToPremium = async () => {
-    // In a real app, this would integrate with a payment processor like Stripe
-    // For demo purposes, we'll just update the subscription
+  const upgradeToPlan = async (planId) => {
     try {
-      await updateProfile({ 
-        subscription_plan: 'premium',
-        subscription_expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString() // 1 year from now
-      });
-      setMessage('🎉 Upgraded to Premium! You now have unlimited invoices and custom branding.');
-    } catch (error) {
-      setMessage('❌ Failed to upgrade. Please try again.');
-    }
-  };
+      // Get user's access token
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
 
-  const testUpgradeToPremium = async () => {
-    // Development testing upgrade using admin API
-    try {
-      const response = await fetch('/api/admin/upgrade-user', {
+      if (!token) {
+        throw new Error('Authentication token not found');
+      }
+
+      const response = await fetch('/api/usage/plan', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          adminSecret: 'snap2invoice-admin-test-key-2024',
-          userEmail: user.email,
-          action: 'upgrade'
-        }),
+        body: JSON.stringify({ planId }),
       });
-
+      
       const data = await response.json();
       
-      if (response.ok) {
-        // Refresh profile data
+      if (response.ok && data.success) {
+        setMessage(`✅ Successfully upgraded to ${data.newPlan.name} plan!`);
+        // Refresh profile to show new plan
         await fetchProfile();
-        setMessage('🎉 Upgraded to Premium for testing! You now have unlimited invoices and custom branding.');
       } else {
-        setMessage('❌ Failed to upgrade: ' + data.error);
+        setMessage('❌ Failed to upgrade plan: ' + data.error);
       }
     } catch (error) {
+      console.error('Error upgrading plan:', error);
       setMessage('❌ Failed to upgrade. Please try again.');
     }
   };
@@ -299,22 +309,6 @@ export default function AccountPage() {
     }
   };
 
-  const cancelSubscription = async () => {
-    if (!confirm('Are you sure you want to cancel your premium subscription?')) {
-      return;
-    }
-
-    try {
-      await updateProfile({ 
-        subscription_plan: 'free',
-        subscription_expires_at: null,
-        logo_url: null // Remove custom logo
-      });
-      setMessage('⚠️ Downgraded to free plan. Your custom logo has been removed.');
-    } catch (error) {
-      setMessage('❌ Failed to cancel subscription. Please try again.');
-    }
-  };
 
   if (loading) {
     return (
@@ -327,10 +321,6 @@ export default function AccountPage() {
   if (!user || !profile) {
     return null;
   }
-
-  const currentMonth = new Date().toISOString().slice(0, 7);
-  const isFreePlan = profile.subscription_plan === 'free';
-  const monthlyUsage = profile.month_year === currentMonth ? profile.invoices_this_month : 0;
 
   return (
     <>
@@ -351,80 +341,127 @@ export default function AccountPage() {
             </div>
           )}
 
-          {/* Subscription Status */}
+          {/* Pay-Per-Use Subscription Status */}
           <div className="card mb-8">
-            <h2 className="text-xl font-semibold mb-4">Subscription</h2>
+            <h2 className="text-xl font-semibold mb-4">Pay-Per-Use Plan</h2>
             
             <div className="flex items-center justify-between mb-4">
               <div>
                 <div className="flex items-center space-x-2">
                   <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    isFreePlan 
+                    profile.subscription_plan === 'free'
                       ? 'bg-gray-100 text-gray-800' 
-                      : 'bg-blue-100 text-blue-800'
+                      : profile.subscription_plan === 'starter'
+                        ? 'bg-blue-100 text-blue-800'
+                        : 'bg-purple-100 text-purple-800'
                   }`}>
-                    {isFreePlan ? 'Free Plan' : 'Premium Plan'}
+                    {profile.plan_details?.name || profile.subscription_plan.charAt(0).toUpperCase() + profile.subscription_plan.slice(1)} Plan
                   </span>
-                  {!isFreePlan && profile.subscription_expires_at && (
-                    <span className="text-sm text-gray-600">
-                      Expires: {new Date(profile.subscription_expires_at).toLocaleDateString()}
-                    </span>
-                  )}
                 </div>
                 
-                {isFreePlan && (
-                  <p className="text-sm text-gray-600 mt-2">
-                    {monthlyUsage}/3 invoices used this month
-                  </p>
+                {profile.usage && (
+                  <div className="text-sm text-gray-600 mt-2">
+                    <p>{profile.usage.receiptsProcessed} receipts used this month</p>
+                    {profile.usage.remainingReceipts > 0 && (
+                      <p>{profile.usage.remainingReceipts} receipts remaining</p>
+                    )}
+                    {profile.usage.projectedBill && (
+                      <p className="font-medium">Current bill: {profile.usage.projectedBill}</p>
+                    )}
+                  </div>
                 )}
               </div>
               
-              {isFreePlan ? (
-                <div className="flex flex-col space-y-2">
-                  <button 
-                    onClick={upgradeToPremium}
-                    className="btn-primary"
-                  >
-                    Upgrade to Premium
-                  </button>
-                  <button 
-                    onClick={testUpgradeToPremium}
-                    className="text-xs bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-600"
-                    title="Development testing only"
-                  >
-                    🧪 Test Upgrade (Dev Only)
-                  </button>
-                </div>
-              ) : (
-                <button 
-                  onClick={cancelSubscription}
-                  className="btn-secondary"
-                >
-                  Cancel Subscription
-                </button>
-              )}
+              <div className="flex space-x-2">
+                {profile.subscription_plan === 'free' && (
+                  <>
+                    <button 
+                      onClick={() => upgradeToPlan('starter')}
+                      className="btn-primary text-sm"
+                    >
+                      Upgrade to Starter
+                    </button>
+                    <button 
+                      onClick={() => upgradeToPlan('pro')}
+                      className="btn-secondary text-sm"
+                    >
+                      Upgrade to Pro
+                    </button>
+                  </>
+                )}
+                {profile.subscription_plan === 'starter' && (
+                  <>
+                    <button 
+                      onClick={() => upgradeToPlan('pro')}
+                      className="btn-primary text-sm"
+                    >
+                      Upgrade to Pro
+                    </button>
+                    <button 
+                      onClick={() => upgradeToPlan('free')}
+                      className="btn-secondary text-sm"
+                    >
+                      Downgrade to Free
+                    </button>
+                  </>
+                )}
+                {profile.subscription_plan === 'pro' && (
+                  <>
+                    <button 
+                      onClick={() => upgradeToPlan('starter')}
+                      className="btn-secondary text-sm"
+                    >
+                      Downgrade to Starter
+                    </button>
+                    <button 
+                      onClick={() => upgradeToPlan('free')}
+                      className="btn-secondary text-sm"
+                    >
+                      Downgrade to Free
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
 
             {/* Plan Comparison */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-              <div className="border rounded-lg p-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+              <div className={`border rounded-lg p-4 ${
+                profile.subscription_plan === 'free' ? 'border-2 border-gray-400' : 'border-gray-200'
+              }`}>
                 <h3 className="font-semibold mb-2">Free Plan</h3>
+                <p className="text-lg font-bold mb-2">$0/month</p>
                 <ul className="text-sm space-y-1 text-gray-600">
-                  <li>✅ 3 invoices per month</li>
-                  <li>✅ OCR receipt processing</li>
-                  <li>✅ Basic invoice editing</li>
+                  <li>✅ 3 receipts per month</li>
+                  <li>✅ OCR processing</li>
+                  <li>✅ Basic editing</li>
                   <li>❌ Custom branding</li>
-                  <li>❌ Unlimited invoices</li>
                 </ul>
               </div>
               
-              <div className="border-2 border-blue-500 rounded-lg p-4">
-                <h3 className="font-semibold mb-2 text-blue-600">Premium Plan</h3>
+              <div className={`border rounded-lg p-4 ${
+                profile.subscription_plan === 'starter' ? 'border-2 border-blue-400' : 'border-gray-200'
+              }`}>
+                <h3 className="font-semibold mb-2 text-blue-600">Starter Plan</h3>
+                <p className="text-lg font-bold mb-2">$9.99/month</p>
                 <ul className="text-sm space-y-1 text-gray-600">
-                  <li>✅ Unlimited invoices</li>
-                  <li>✅ OCR receipt processing</li>
-                  <li>✅ Advanced invoice editing</li>
-                  <li>✅ Custom business logo</li>
+                  <li>✅ 15 receipts included</li>
+                  <li>✅ $0.50 per extra receipt</li>
+                  <li>✅ OCR processing</li>
+                  <li>✅ Custom branding</li>
+                </ul>
+              </div>
+              
+              <div className={`border rounded-lg p-4 ${
+                profile.subscription_plan === 'pro' ? 'border-2 border-purple-400' : 'border-gray-200'
+              }`}>
+                <h3 className="font-semibold mb-2 text-purple-600">Pro Plan</h3>
+                <p className="text-lg font-bold mb-2">$24.99/month</p>
+                <ul className="text-sm space-y-1 text-gray-600">
+                  <li>✅ 50 receipts included</li>
+                  <li>✅ $0.25 per extra receipt</li>
+                  <li>✅ OCR processing</li>
+                  <li>✅ Custom branding</li>
                   <li>✅ Priority support</li>
                 </ul>
               </div>
@@ -497,8 +534,8 @@ export default function AccountPage() {
             </div>
           </div>
 
-          {/* Custom Logo - Premium Only */}
-          {!isFreePlan && (
+          {/* Custom Logo - Available for Starter and Pro plans */}
+          {(profile.subscription_plan === 'starter' || profile.subscription_plan === 'pro') && (
             <div className="card mb-8">
               <h2 className="text-xl font-semibold mb-4">Custom Logo</h2>
               

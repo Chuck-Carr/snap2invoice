@@ -1,9 +1,10 @@
 'use client';
 
 import { forwardRef } from 'react';
+import { hasValidPremiumAccess } from '../lib/subscription';
 
 const InvoiceTemplate = forwardRef(({ invoice, profile }, ref) => {
-  const isPremium = profile?.subscription_plan === 'premium';
+  const isPremium = hasValidPremiumAccess(profile);
   const hasLogo = isPremium && profile?.logo_url;
   
   const formatCurrency = (amount) => {
