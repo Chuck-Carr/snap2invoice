@@ -615,7 +615,7 @@ export default function ReceiptsPage() {
                         </p>
                         <div className="text-xs text-gray-500 mt-2 space-y-1">
                           <p className="text-yellow-600">
-                            ⚠️ iPhone HEIC files not supported - change camera to "Most Compatible" or convert to JPG
+                          ⚠️ iPhone HEIC files not supported - change camera to &quot;Most Compatible&quot; or convert to JPG
                           </p>
                           <p>
                             📷 <strong>For better OCR results:</strong> Ensure good lighting, keep receipt flat, avoid shadows, and capture the entire receipt

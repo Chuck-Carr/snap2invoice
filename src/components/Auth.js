@@ -150,10 +150,10 @@ export default function Auth() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full space-y-8">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-6">
+      <div className="max-w-md w-full space-y-6 sm:space-y-8">
         <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+          <h2 className="mt-4 sm:mt-6 text-center text-2xl sm:text-3xl font-extrabold text-gray-900">
             {isForgotPassword 
               ? 'Reset your password' 
               : isSignUp 
@@ -187,7 +187,7 @@ export default function Auth() {
           </div>
         )}
         
-        <form className="mt-8 space-y-6" onSubmit={isForgotPassword ? handleForgotPassword : handleSubmit}>
+        <form className="mt-6 sm:mt-8 space-y-4 sm:space-y-6" onSubmit={isForgotPassword ? handleForgotPassword : handleSubmit}>
           <div>
             <label htmlFor="email" className="sr-only">Email address</label>
             <input
@@ -235,13 +235,13 @@ export default function Auth() {
             </button>
           </div>
 
-          <div className="text-center space-y-2">
+          <div className="text-center space-y-3 sm:space-y-2">
             {!isForgotPassword && !isSignUp && (
               <div>
                 <button
                   type="button"
                   onClick={() => setIsForgotPassword(true)}
-                  className="text-blue-600 hover:text-blue-500 text-sm"
+                  className="text-blue-600 hover:text-blue-500 text-sm touch-target"
                 >
                   Forgot your password?
                 </button>
@@ -252,7 +252,7 @@ export default function Auth() {
               <button
                 type="button"
                 onClick={() => setIsSignUp(!isSignUp)}
-                className="text-blue-600 hover:text-blue-500"
+                className="text-blue-600 hover:text-blue-500 touch-target text-sm sm:text-base"
               >
                 {isSignUp 
                   ? 'Already have an account? Sign in' 
@@ -267,7 +267,7 @@ export default function Auth() {
                   setIsForgotPassword(false);
                   setMessage('');
                 }}
-                className="text-blue-600 hover:text-blue-500"
+                className="text-blue-600 hover:text-blue-500 touch-target text-sm sm:text-base"
               >
                 Back to sign in
               </button>
@@ -275,8 +275,8 @@ export default function Auth() {
           </div>
 
           {message && (
-            <div className={`text-center p-3 rounded ${
-              message.includes('Check your email') 
+            <div className={`text-center p-3 sm:p-4 rounded-lg text-sm sm:text-base ${
+              message.includes('Check your email') || message.includes('✅')
                 ? 'text-green-700 bg-green-100' 
                 : 'text-red-700 bg-red-100'
             }`}>

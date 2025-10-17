@@ -1,9 +1,17 @@
-import { stripe } from '../../../../lib/stripe';
+import { stripe } from '@/lib/stripe';
 import { createClient } from '@supabase/supabase-js';
+import { updateUserPlan, initializeUsageTracking } from '@/lib/usage-tracker';
+import { PRICING_PLANS } from '@/lib/pricing';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+// Map Stripe price IDs to plan IDs
+const STRIPE_PRICE_TO_PLAN = {
+  [process.env.STRIPE_STARTER_PRICE_ID]: 'starter',
+  [process.env.STRIPE_PRO_PRICE_ID]: 'pro',
+};
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
@@ -57,29 +65,54 @@ export async function POST(req) {
 
 async function handleCheckoutSessionCompleted(session) {
   const userId = session.metadata.user_id;
+  const planId = session.metadata.plan_id;
   const subscriptionId = session.subscription;
 
-  if (!userId || !subscriptionId) {
-    console.error('Missing user_id or subscription_id in checkout session metadata');
+  if (!userId || !subscriptionId || !planId) {
+    console.error('Missing required metadata in checkout session:', {
+      userId,
+      planId,
+      subscriptionId
+    });
     return;
   }
 
-  // Get subscription details from Stripe
-  const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-  
-  // Update user profile with subscription details
-  await supabase
-    .from('user_profiles')
-    .update({
-      subscription_plan: 'premium',
-      stripe_subscription_id: subscriptionId,
-      subscription_expires_at: new Date(subscription.current_period_end * 1000).toISOString(),
-      subscription_cancelled_at: null,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', userId);
+  try {
+    // Initialize usage tracking tables if needed
+    await initializeUsageTracking();
 
-  console.log(`Subscription activated for user ${userId}`);
+    // Get subscription details from Stripe
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+    const priceId = subscription.items.data[0]?.price?.id;
+    
+    // Verify the plan matches what was purchased
+    const expectedPlan = STRIPE_PRICE_TO_PLAN[priceId];
+    if (expectedPlan !== planId) {
+      console.error(`Plan mismatch: expected ${expectedPlan}, got ${planId}`);
+    }
+    
+    // Update user to new plan using usage tracker
+    await updateUserPlan(userId, planId);
+    
+    // Update user profile with Stripe subscription details
+    await supabase
+      .from('user_profiles')
+      .upsert({
+        id: userId,
+        subscription_plan: planId,
+        stripe_subscription_id: subscriptionId,
+        subscription_expires_at: new Date(subscription.current_period_end * 1000).toISOString(),
+        subscription_cancelled_at: null,
+        updated_at: new Date().toISOString()
+      });
+
+    const plan = PRICING_PLANS[planId.toUpperCase()];
+    console.log(`✅ Subscription activated: User ${userId} upgraded to ${plan.name} plan`);
+    
+  } catch (error) {
+    console.error('❌ Error handling checkout session completed:', error);
+    throw error;
+  }
 }
 
 async function handleInvoicePaymentSucceeded(invoice) {
@@ -154,31 +187,43 @@ async function handleSubscriptionUpdated(subscription) {
 async function handleSubscriptionDeleted(subscription) {
   const customerId = subscription.customer;
 
-  // Find user by customer ID
-  const { data: profiles } = await supabase
-    .from('user_profiles')
-    .select('id')
-    .eq('stripe_customer_id', customerId);
+  try {
+    // Find user by customer ID
+    const { data: profiles } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('stripe_customer_id', customerId);
 
-  if (!profiles || profiles.length === 0) {
-    console.error(`No user found for customer ${customerId}`);
-    return;
+    if (!profiles || profiles.length === 0) {
+      console.error(`No user found for customer ${customerId}`);
+      return;
+    }
+
+    const userId = profiles[0].id;
+    
+    // Initialize usage tracking
+    await initializeUsageTracking();
+
+    // Downgrade user to free plan using usage tracker
+    await updateUserPlan(userId, 'free');
+
+    // Update user profile
+    await supabase
+      .from('user_profiles')
+      .update({
+        subscription_plan: 'free',
+        stripe_subscription_id: null,
+        subscription_expires_at: null,
+        subscription_cancelled_at: null,
+        logo_url: null, // Remove custom logo
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', userId);
+
+    console.log(`✅ Subscription ended: User ${userId} downgraded to free plan`);
+    
+  } catch (error) {
+    console.error('❌ Error handling subscription deleted:', error);
+    throw error;
   }
-
-  const userId = profiles[0].id;
-
-  // Downgrade user to free plan
-  await supabase
-    .from('user_profiles')
-    .update({
-      subscription_plan: 'free',
-      stripe_subscription_id: null,
-      subscription_expires_at: null,
-      subscription_cancelled_at: null,
-      logo_url: null, // Remove custom logo
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', userId);
-
-  console.log(`Subscription ended for user ${userId}, downgraded to free plan`);
 }

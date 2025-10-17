@@ -444,7 +444,7 @@ export default function InvoiceEditPage() {
                   </div>
                 )) : (
                   <div className="text-center py-8 text-gray-500">
-                    <p>No items found. Click "+ Add Item" to add your first item.</p>
+                    <p>No items found. Click &quot;+ Add Item&quot; to add your first item.</p>
                   </div>
                 )}
               </div>

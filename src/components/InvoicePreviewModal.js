@@ -74,46 +74,55 @@ const InvoicePreviewModal = ({ isOpen, onClose, invoice, profile }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="flex justify-between items-center p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-800">
-            Invoice Preview - #{invoice.invoice_number}
-          </h2>
-          <div className="flex space-x-3">
-            <button
-              onClick={handlePrint}
-              className="btn-secondary text-sm"
-              disabled={isGenerating}
-            >
-              🖨️ Print
-            </button>
-            <button
-              onClick={handleDownloadPDF}
-              disabled={isGenerating}
-              className="btn-primary text-sm"
-            >
-              {isGenerating ? 'Generating...' : '📄 Download PDF'}
-            </button>
-            <button
-              onClick={onClose}
-              className="text-gray-500 hover:text-gray-700 text-xl font-bold px-2"
-            >
-              ×
-            </button>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex flex-col z-50">
+      <div className="bg-white w-full h-full flex flex-col sm:rounded-lg sm:max-w-6xl sm:mx-auto sm:my-4 sm:h-auto sm:max-h-[90vh]">
+        {/* Header - Always visible */}
+        <div className="flex-shrink-0 bg-white p-3 sm:p-6 border-b border-gray-200 shadow-sm">
+          <div className="flex flex-col space-y-3 sm:flex-row sm:justify-between sm:items-center sm:space-y-0">
+            <h2 className="text-base sm:text-xl font-semibold text-gray-800 truncate pr-2">
+              Invoice Preview - #{invoice.invoice_number}
+            </h2>
+            
+            {/* Action buttons */}
+            <div className="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-3">
+              <div className="flex space-x-2">
+                <button
+                  onClick={handlePrint}
+                  className="btn-secondary text-sm flex-1 sm:flex-none px-3 py-2"
+                  disabled={isGenerating}
+                >
+                  🖨️ Print
+                </button>
+                <button
+                  onClick={handleDownloadPDF}
+                  disabled={isGenerating}
+                  className="btn-primary text-sm flex-1 sm:flex-none px-3 py-2"
+                >
+                  {isGenerating ? 'Generating...' : '📄 PDF'}
+                </button>
+              </div>
+              
+              <button
+                onClick={onClose}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-800 px-4 py-2 rounded-lg text-sm font-medium transition-colors min-h-[40px] flex items-center justify-center"
+              >
+                ✕ Close
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Preview Content */}
-        <div className="flex-1 overflow-auto p-6 bg-gray-100">
-          <div className="max-w-4xl mx-auto bg-white shadow-lg">
+        {/* Preview Content - Scrollable */}
+        <div className="flex-1 overflow-auto bg-gray-100 p-2 sm:p-6">
+          <div className="bg-white shadow-lg rounded-lg overflow-hidden max-w-4xl mx-auto">
             <InvoiceTemplate
               ref={invoiceRef}
               invoice={invoice}
               profile={profile}
+              isMobilePreview={true}
             />
           </div>
+          
           {/* Hidden PDF-optimized version for generation */}
           <div style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
             <InvoiceTemplatePDF
@@ -124,9 +133,9 @@ const InvoicePreviewModal = ({ isOpen, onClose, invoice, profile }) => {
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="p-6 border-t border-gray-200 bg-gray-50 text-center">
-          <p className="text-sm text-gray-600">
+        {/* Footer - Always visible on desktop, hidden on mobile to save space */}
+        <div className="hidden sm:block flex-shrink-0 p-4 sm:p-6 border-t border-gray-200 bg-gray-50 text-center">
+          <p className="text-xs sm:text-sm text-gray-600">
             This is a preview of your invoice. Use the buttons above to print or download as PDF.
           </p>
           {profile?.subscription_plan !== 'premium' && (

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { canUserUploadReceipt } from '../../../../lib/usage-tracker.js';
+import { canUserUploadReceipt } from '@/lib/usage-tracker';
 
 export async function GET(request) {
   try {

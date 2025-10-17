@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { hasValidPremiumAccess, isWithinFreePlanLimits } from '../../../../lib/subscription';
+import { hasValidPremiumAccess, isWithinFreePlanLimits } from '@/lib/subscription';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -88,7 +88,7 @@ export async function POST(req) {
     // OCR utilities are designed for client-side use with Tesseract.js
     
     // Import enhanced server-side extraction
-    const { extractReceiptDataServer } = await import('../../../../lib/ocr-server.js');
+    const { extractReceiptDataServer } = await import('@/lib/ocr-server');
     
     // Server-side invoice items generation (enhanced)
     function generateInvoiceItemsServer(extractedData) {

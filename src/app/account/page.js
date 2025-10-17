@@ -34,10 +34,54 @@ export default function AccountPage() {
     }
   }, [user]);
 
+  // Handle Stripe checkout success/cancel
+  useEffect(() => {
+    // Only handle URL params if user is loaded
+    if (!user || loading) return;
+    
+    const urlParams = new URLSearchParams(window.location.search);
+    const success = urlParams.get('success');
+    const canceled = urlParams.get('canceled');
+    const plan = urlParams.get('plan');
+    
+    if (success === 'true' && plan) {
+      setMessage(`🎉 Successfully subscribed to ${plan.charAt(0).toUpperCase() + plan.slice(1)} plan! Your subscription is now active.`);
+      // Clear URL parameters
+      window.history.replaceState({}, '', window.location.pathname);
+      // Refresh profile to show new subscription
+      setTimeout(() => {
+        fetchProfile();
+      }, 2000);
+    } else if (canceled === 'true') {
+      setMessage('⚠️ Checkout was canceled. Your subscription was not changed.');
+      // Clear URL parameters
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [user, loading]);
+
   const fetchProfile = async () => {
+    // Early return if user is not available yet
+    if (!user || !user.id) {
+      console.log('User not available yet, skipping fetchProfile');
+      return;
+    }
+    
     try {
+      // Get user's access token
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      
+      if (!token) {
+        throw new Error('Authentication token not found');
+      }
+      
       // Try new pay-per-use system first
-      const response = await fetch('/api/usage/analytics');
+      const response = await fetch('/api/usage/analytics', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      
       if (response.ok) {
         const usageData = await response.json();
         setProfile({
@@ -109,6 +153,8 @@ export default function AccountPage() {
   };
 
   const updateProfile = async (updates) => {
+    if (!user || !user.id) return;
+    
     setSaving(true);
     try {
       const { error } = await supabase
@@ -191,7 +237,38 @@ export default function AccountPage() {
 
   const upgradeToPlan = async (planId) => {
     try {
-      // Get user's access token
+      // For free plan, use direct downgrade
+      if (planId.toLowerCase() === 'free') {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+
+        if (!token) {
+          throw new Error('Authentication token not found');
+        }
+
+        const response = await fetch('/api/usage/plan', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({ planId }),
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+          setMessage(`✅ Successfully downgraded to ${data.newPlan.name} plan!`);
+          await fetchProfile();
+        } else {
+          setMessage('❌ Failed to downgrade plan: ' + data.error);
+        }
+        return;
+      }
+
+      // For paid plans, use Stripe checkout
+      setMessage('🔄 Redirecting to secure checkout...');
+      
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
@@ -199,23 +276,26 @@ export default function AccountPage() {
         throw new Error('Authentication token not found');
       }
 
-      const response = await fetch('/api/usage/plan', {
+      const response = await fetch('/api/create-subscription-checkout', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({ planId }),
+        body: JSON.stringify({ 
+          planId,
+          successUrl: `${window.location.origin}/account?success=true&plan=${planId}`,
+          cancelUrl: `${window.location.origin}/account?canceled=true`
+        }),
       });
       
       const data = await response.json();
       
-      if (response.ok && data.success) {
-        setMessage(`✅ Successfully upgraded to ${data.newPlan.name} plan!`);
-        // Refresh profile to show new plan
-        await fetchProfile();
+      if (response.ok && data.url) {
+        // Redirect to Stripe checkout
+        window.location.href = data.url;
       } else {
-        setMessage('❌ Failed to upgrade plan: ' + data.error);
+        setMessage('❌ Failed to create checkout session: ' + (data.error || 'Unknown error'));
       }
     } catch (error) {
       console.error('Error upgrading plan:', error);
@@ -325,9 +405,9 @@ export default function AccountPage() {
   return (
     <>
       <Navigation />
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-6 sm:py-8">
         <div className="max-w-2xl mx-auto">
-          <h1 className="text-3xl font-bold mb-8">Account Settings</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold mb-6 sm:mb-8">Account Settings</h1>
 
           {message && (
             <div className={`p-4 rounded-lg mb-6 ${
@@ -372,20 +452,20 @@ export default function AccountPage() {
                 )}
               </div>
               
-              <div className="flex space-x-2">
+              <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
                 {profile.subscription_plan === 'free' && (
                   <>
                     <button 
                       onClick={() => upgradeToPlan('starter')}
                       className="btn-primary text-sm"
                     >
-                      Upgrade to Starter
+                      💳 Subscribe to Starter
                     </button>
                     <button 
                       onClick={() => upgradeToPlan('pro')}
                       className="btn-secondary text-sm"
                     >
-                      Upgrade to Pro
+                      💳 Subscribe to Pro
                     </button>
                   </>
                 )}
@@ -425,7 +505,7 @@ export default function AccountPage() {
             </div>
 
             {/* Plan Comparison */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
               <div className={`border rounded-lg p-4 ${
                 profile.subscription_plan === 'free' ? 'border-2 border-gray-400' : 'border-gray-200'
               }`}>
@@ -648,11 +728,11 @@ export default function AccountPage() {
                       />
                     </div>
                     
-                    <div className="flex space-x-3">
+                    <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
                       <button
                         type="submit"
                         disabled={passwordLoading}
-                        className="btn-primary"
+                        className="btn-primary w-full sm:w-auto"
                       >
                         {passwordLoading ? 'Updating...' : 'Update Password'}
                       </button>
@@ -663,7 +743,7 @@ export default function AccountPage() {
                           setShowPasswordForm(false);
                           setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
                         }}
-                        className="btn-secondary"
+                        className="btn-secondary w-full sm:w-auto"
                       >
                         Cancel
                       </button>
@@ -692,7 +772,7 @@ export default function AccountPage() {
                     <div className="space-y-4">
                       <div>
                         <label className="block text-sm font-medium text-red-800 mb-2">
-                          Type "DELETE MY ACCOUNT" to confirm:
+                          Type &quot;DELETE MY ACCOUNT&quot; to confirm:
                         </label>
                         <input
                           type="text"
@@ -703,11 +783,11 @@ export default function AccountPage() {
                         />
                       </div>
                       
-                      <div className="flex space-x-3">
+                      <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
                         <button
                           onClick={deleteAccount}
                           disabled={deletingAccount || deleteConfirmText !== 'DELETE MY ACCOUNT'}
-                          className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="bg-red-600 text-white px-4 py-3 md:py-2 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] flex items-center justify-center w-full sm:w-auto"
                         >
                           {deletingAccount ? 'Deleting...' : '🗑️ Permanently Delete Account'}
                         </button>
@@ -718,7 +798,7 @@ export default function AccountPage() {
                             setShowDeleteConfirm(false);
                             setDeleteConfirmText('');
                           }}
-                          className="btn-secondary"
+                          className="btn-secondary w-full sm:w-auto"
                         >
                           Cancel
                         </button>

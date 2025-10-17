@@ -144,12 +144,12 @@ export default function InvoicesPage() {
   return (
     <>
       <Navigation />
-      <main className="container mx-auto px-4 py-8">
-        <div className="flex justify-between items-center mb-8">
+      <main className="container mx-auto px-4 py-6 sm:py-8">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-6 sm:mb-8 space-y-4 sm:space-y-0">
           <div>
-            <h1 className="text-3xl font-bold mb-2">Your Invoices</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold mb-2">Your Invoices</h1>
             {!isPremium && (
-              <p className="text-gray-600">
+              <p className="text-gray-600 text-sm sm:text-base">
                 Free plan: {monthlyUsage}/3 invoices this month
                 {!canCreateMore && (
                   <span className="text-red-600 ml-2">Limit reached</span>
@@ -158,18 +158,18 @@ export default function InvoicesPage() {
             )}
           </div>
           
-          <div className="flex space-x-4">
+          <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
             {!canCreateMore && (
-              <div className="text-center">
+              <div className="text-center sm:text-left">
                 <p className="text-sm text-red-600 mb-2">Monthly limit reached</p>
-                <Link href="/account" className="btn-secondary text-sm">
+                <Link href="/account" className="btn-secondary text-sm w-full sm:w-auto">
                   Upgrade to Premium
                 </Link>
               </div>
             )}
             <Link 
               href="/receipts" 
-              className={`btn-primary ${!canCreateMore ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`btn-primary w-full sm:w-auto ${!canCreateMore ? 'opacity-50 cursor-not-allowed' : ''}`}
               onClick={(e) => {
                 if (!canCreateMore) {
                   e.preventDefault();
@@ -194,24 +194,24 @@ export default function InvoicesPage() {
             </Link>
           </div>
         ) : (
-          <div className="grid gap-6">
+          <div className="space-y-4 sm:space-y-6">
             {invoices.map((invoice) => (
               <div key={invoice.id} className="card">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-4 mb-2">
+                <div className="flex flex-col space-y-4 sm:space-y-0 sm:flex-row sm:justify-between sm:items-start">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 mb-3 sm:mb-2">
                       <h3 className="text-lg font-semibold">
                         #{invoice.invoice_number}
                       </h3>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(invoice.status)}`}>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium inline-block w-fit ${getStatusColor(invoice.status)}`}>
                         {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
                       </span>
                     </div>
                     
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 text-sm text-gray-600">
                       <div>
                         <span className="font-medium">Client:</span>
-                        <div>{invoice.client_name || 'No client name'}</div>
+                        <div className="truncate">{invoice.client_name || 'No client name'}</div>
                       </div>
                       <div>
                         <span className="font-medium">Amount:</span>
@@ -230,12 +230,12 @@ export default function InvoicesPage() {
                     </div>
                   </div>
                   
-                  <div className="flex items-center space-x-2 ml-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 sm:ml-4">
                     {/* Status Dropdown */}
                     <select
                       value={invoice.status}
                       onChange={(e) => updateInvoiceStatus(invoice.id, e.target.value)}
-                      className="text-sm border rounded px-2 py-1"
+                      className="text-sm border rounded-lg px-3 py-2 w-full sm:w-auto"
                     >
                       <option value="draft">Draft</option>
                       <option value="sent">Sent</option>
@@ -243,19 +243,21 @@ export default function InvoicesPage() {
                       <option value="cancelled">Cancelled</option>
                     </select>
                     
-                    <Link 
-                      href={`/invoices/${invoice.id}`}
-                      className="btn-primary text-sm"
-                    >
-                      Edit
-                    </Link>
-                    
-                    <button
-                      onClick={() => deleteInvoice(invoice.id)}
-                      className="text-red-600 hover:text-red-800 text-sm px-2 py-1"
-                    >
-                      Delete
-                    </button>
+                    <div className="flex space-x-2">
+                      <Link 
+                        href={`/invoices/${invoice.id}`}
+                        className="btn-primary text-sm flex-1 sm:flex-none"
+                      >
+                        Edit
+                      </Link>
+                      
+                      <button
+                        onClick={() => deleteInvoice(invoice.id)}
+                        className="text-red-600 hover:text-red-800 text-sm px-3 py-2 border border-red-300 rounded-lg hover:bg-red-50 touch-target"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

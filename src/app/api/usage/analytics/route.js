@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { getUserUsageAnalytics, initializeUsageTracking } from '../../../../lib/usage-tracker.js';
-import { PRICING_PLANS, formatCurrency } from '../../../../lib/pricing.js';
+import { getUserUsageAnalytics, initializeUsageTracking } from '@/lib/usage-tracker';
+import { PRICING_PLANS, formatCurrency } from '@/lib/pricing';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 

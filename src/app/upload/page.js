@@ -274,22 +274,22 @@ export default function ReceiptsPage() {
   return (
     <>
       <Navigation />
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-6 sm:py-8">
         <div className="max-w-6xl mx-auto">
-          <div className="flex justify-between items-center mb-8">
-            <h1 className="text-3xl font-bold">Your Receipts</h1>
-            <div className="flex space-x-4">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 sm:mb-8 space-y-4 sm:space-y-0">
+            <h1 className="text-2xl sm:text-3xl font-bold">Your Receipts</h1>
+            <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
               {selectedReceipts.length > 0 && (
                 <button
                   onClick={() => setShowAddToInvoiceModal(true)}
-                  className="btn-secondary"
+                  className="btn-secondary w-full sm:w-auto"
                 >
                   Add to Invoice ({selectedReceipts.length})
                 </button>
               )}
               <button
                 onClick={() => setShowUploadForm(!showUploadForm)}
-                className="btn-primary"
+                className="btn-primary w-full sm:w-auto"
               >
                 {showUploadForm ? 'Cancel' : '+ Upload Receipts'}
               </button>
@@ -306,7 +306,7 @@ export default function ReceiptsPage() {
                   <select
                     value={selectedInvoice}
                     onChange={(e) => setSelectedInvoice(e.target.value)}
-                    className="w-full p-2 border rounded-lg"
+                    className="w-full p-3 border rounded-lg text-base"
                   >
                     <option value="">Create new invoice</option>
                     {invoices.map(invoice => (
@@ -362,7 +362,7 @@ export default function ReceiptsPage() {
                           Supports JPG, PNG, WebP, and PDF files
                         </p>
                         <p className="text-xs text-yellow-600 mt-1">
-                          ⚠️ iPhone HEIC files not supported - change camera to "Most Compatible" or convert to JPG
+                          ⚠️ iPhone HEIC files not supported - change camera to &quot;Most Compatible&quot; or convert to JPG
                         </p>
                       </div>
                     )}
@@ -439,7 +439,7 @@ export default function ReceiptsPage() {
               </button>
             </div>
           ) : (
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {receipts.map((receipt) => (
                 <div key={receipt.id} className={`card cursor-pointer transition-colors ${
                   selectedReceipts.includes(receipt.id) ? 'ring-2 ring-blue-500 bg-blue-50' : ''
@@ -449,15 +449,15 @@ export default function ReceiptsPage() {
                       type="checkbox"
                       checked={selectedReceipts.includes(receipt.id)}
                       onChange={() => handleReceiptSelect(receipt.id)}
-                      className="mt-1"
+                      className="mt-1 h-4 w-4 touch-target"
                     />
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-2">
-                        <h3 className="font-semibold text-sm truncate">
+                        <h3 className="font-semibold text-sm truncate pr-2">
                           {receipt.file_name}
                         </h3>
                         {receipt.ocr_processed && (
-                          <span className="text-green-600 text-xs">✓ OCR</span>
+                          <span className="text-green-600 text-xs whitespace-nowrap">✓ OCR</span>
                         )}
                       </div>
                       
@@ -548,23 +548,23 @@ export default function ReceiptsPage() {
           )}
           
           {/* How it works info */}
-          <div className="mt-12 text-center text-gray-500">
-            <h3 className="font-semibold mb-2">How it works:</h3>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
+          <div className="mt-8 sm:mt-12 text-center text-gray-500">
+            <h3 className="font-semibold mb-4 sm:mb-2">How it works:</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
               <div>
-                <div className="text-2xl mb-1">📤</div>
+                <div className="text-3xl sm:text-2xl mb-2 sm:mb-1">📤</div>
                 <p>Upload receipts</p>
               </div>
               <div>
-                <div className="text-2xl mb-1">🔍</div>
+                <div className="text-3xl sm:text-2xl mb-2 sm:mb-1">🔍</div>
                 <p>AI extracts data</p>
               </div>
               <div>
-                <div className="text-2xl mb-1">📋</div>
+                <div className="text-3xl sm:text-2xl mb-2 sm:mb-1">📋</div>
                 <p>Create/edit invoices</p>
               </div>
               <div>
-                <div className="text-2xl mb-1">🔗</div>
+                <div className="text-3xl sm:text-2xl mb-2 sm:mb-1">🔗</div>
                 <p>Link multiple receipts</p>
               </div>
             </div>
